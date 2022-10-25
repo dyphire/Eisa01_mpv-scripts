@@ -49,7 +49,7 @@ local o = {
 	date_format = '%A/%B %d/%m/%Y %X', --Date format in the log (see lua date formatting), e.g.:'%d/%m/%y %X' or '%d/%b/%y %X'
 	file_title_logging = 'protocols', --Change between 'all', 'protocols', 'none'. This option will store the media title in log file, it is useful for websites / protocols because title cannot be parsed from links alone
 	logging_protocols=[[
-	["https?://", "magnet:", "rtmp:"]
+	["://", "magnet:"]
 	]], --add above (after a comma) any protocol you want its title to be stored in the log file. This is valid only for (file_title_logging = 'protocols' or file_title_logging = 'all')
 	prefer_filename_over_title = 'local', --Prefers to log filename over filetitle. Select between 'local', 'protocols', 'all', and 'none'. 'local' prefer filenames for videos that are not protocols. 'protocols' will prefer filenames for protocols only. 'all' will prefer filename over filetitle for both protocols and not protocols videos. 'none' will always use filetitle instead of filename
 	same_entry_limit = 2, --Limit saving entries with same path: -1 for unlimited, 0 will always update entries of same path, e.g. value of 3 will have the limit of 3 then it will start updating old values on the 4th entry.
@@ -307,8 +307,11 @@ local filterName = 'all'
 local sortName
 
 function starts_protocol(tab, val)
-	for index, value in ipairs(tab) do
-		if (val:find(value) == 1) then
+	for index, element in ipairs(tab) do
+        if string.find(val, element) then
+            return true
+        end
+		if (val:find(element) == 1) then
 			return true
 		end
 	end

@@ -75,7 +75,7 @@ local o = {
 	log_file = 'mpvBookmark.log', --name+extension of the file that will be used to store the log data
 	file_title_logging = 'all', --Change between 'all', 'protocols', 'local', 'none'. This option will store the media title in log file, it is useful for websites / protocols because title cannot be parsed from links alone
 	logging_protocols=[[
-	["https?://", "magnet:", "rtmp:"]
+	["://", "magnet:"]
 	]], --add above (after a comma) any protocol you want its title to be stored in the log file. This is valid only for (file_title_logging = 'protocols' or file_title_logging = 'all')
 	same_entry_limit = -1, --Limit saving entries with same path: -1 for unlimited, 0 will always update entries of same path, e.g. value of 3 will have the limit of 3 then it will start updating old values on the 4th entry.
 	overwrite_preserve_properties = true, --true is to preserve groups / slots or any other property when an entry is overwritten.
@@ -337,8 +337,11 @@ local filterName = 'all'
 local sortName
 
 function starts_protocol(tab, val)
-	for index, value in ipairs(tab) do
-		if (val:find(value) == 1) then
+	for index, element in ipairs(tab) do
+        if string.find(val, element) then
+            return true
+        end
+		if (val:find(element) == 1) then
 			return true
 		end
 	end
