@@ -254,7 +254,12 @@ o.open_list_keybind = utils.parse_json(o.open_list_keybind)
 o.list_filter_jump_keybind = utils.parse_json(o.list_filter_jump_keybind)
 o.list_ignored_keybind = utils.parse_json(o.list_ignored_keybind)
 
-utils.shared_script_property_set("simplehistory-menu-open", "no")
+local is_windows = package.config:sub(1, 1) == "\\" -- detect path separator, windows uses backslashes
+
+if utils.shared_script_property_set then
+	utils.shared_script_property_set('simplehistory-menu-open', 'no')
+end
+mp.set_property('user-data/simplehistory/menu-open', 'no')
 
 if o.log_path:match('^/:dir%%mpvconf%%') then
 	o.log_path = o.log_path:gsub('/:dir%%mpvconf%%', mp.find_config_file('.'))
@@ -269,15 +274,15 @@ local log_fullpath = utils.join_path(o.log_path, o.log_file)
 --create log_path if it doesn't exist
 local log_path = utils.split_path(log_fullpath)
 if utils.readdir(log_path) == nil then
-    local is_windows = package.config:sub(1, 1) == "\\"
-    local windows_args = { 'powershell', '-NoProfile', '-Command', 'mkdir', log_path }
-    local unix_args = { 'mkdir', '-p', log_path }
-    local args = is_windows and windows_args or unix_args
-    local res = mp.command_native({name = "subprocess", capture_stdout = true, playback_only = false, args = args})
-    if res.status ~= 0 then
-        msg.error("Failed to create log_path save directory "..log_path..". Error: "..(res.error or "unknown"))
-        return
-    end
+	local is_windows = package.config:sub(1, 1) == "\\"
+	local windows_args = { 'powershell', '-NoProfile', '-Command', 'mkdir', string.format("\"%s\"", log_path) }
+	local unix_args = { 'mkdir', '-p', log_path }
+	local args = is_windows and windows_args or unix_args
+	local res = mp.command_native({name = "subprocess", capture_stdout = true, playback_only = false, args = args})
+	if res.status ~= 0 then
+		msg.error("Failed to create log_path save directory "..log_path..". Error: "..(res.error or "unknown"))
+		return
+	end
 end
 
 local log_length_text = 'length='
@@ -308,11 +313,8 @@ local sortName
 
 function starts_protocol(tab, val)
 	for index, element in ipairs(tab) do
-        if string.find(val, element) then
-            return true
-        end
-		if (val:find(element) == 1) then
-			return true
+		if string.find(val, element) then
+			 		return true
 		end
 	end
 	return false
@@ -396,8 +398,17 @@ function format_time(seconds, sep, decimals, style)
 end
 
 function get_file()
+	function hex_to_char(x)
+		return string.char(tonumber(x, 16))
+	end
+
 	local path = mp.get_property('path')
 	if not path then return end
+	if path:match("bd://") or path:match("dvd://")  or path:match("dvb://") or path:match("cdda://") then return end
+	if not path:match('^%a[%a%d-_]+://') then
+		path = utils.join_path(mp.get_property('working-directory'), path)
+		if is_windows then path = path:gsub("/", "\\") end
+	end
 	
 	local length = (mp.get_property_number('duration') or 0)
 	
@@ -412,6 +423,7 @@ function get_file()
 		title = mp.get_property('filename'):gsub("\"", "")
 	end
 	
+	title = title:gsub('%%(%x%x)', hex_to_char)
 	return path, title, length
 end
 
@@ -496,9 +508,9 @@ function list_sort(tab, sort)
 		local function padnum(d) local dec, n = string.match(d, "(%.?)0*(.+)")
 			return #dec > 0 and ("%.12f"):format(d) or ("%s%03d%s"):format(dec, #n, n) end
 		if sort == 'alphanum-asc' then
-			table.sort(tab, function(a, b) return tostring(a['found_path']):gsub("%.?%d+", padnum) .. ("%3d"):format(#b) > tostring(b['found_path']):gsub("%.?%d+", padnum) .. ("%3d"):format(#a) end)
+			table.sort(tab, function(a, b) return tostring(a['found_path']):lower():gsub("%.?%d+", padnum) .. ("%3d"):format(#b) > tostring(b['found_path']):lower():gsub("%.?%d+", padnum) .. ("%3d"):format(#a) end)
 		elseif sort == 'alphanum-desc' then
-			table.sort(tab, function(a, b) return tostring(a['found_path']):gsub("%.?%d+", padnum) .. ("%3d"):format(#b) < tostring(b['found_path']):gsub("%.?%d+", padnum) .. ("%3d"):format(#a) end)
+			table.sort(tab, function(a, b) return tostring(a['found_path']):lower():gsub("%.?%d+", padnum) .. ("%3d"):format(#b) < tostring(b['found_path']):lower():gsub("%.?%d+", padnum) .. ("%3d"):format(#a) end)
 		end
 	end
 	
@@ -885,7 +897,7 @@ function draw_list()
 
 		-- example in the mpv source suggests this escape method for set_osd_ass:
 		-- https://github.com/mpv-player/mpv/blob/94677723624fb84756e65c8f1377956667244bc9/player/lua/stats.lua#L145
-		p = p:gsub("\\", "/")
+		p = p:gsub('\\', '\\\239\187\191')
 		   :gsub("{", "\\{")
 		   :gsub("^ ", "\\h")
 		osd_msg = osd_msg .. osd_color .. osd_key .. osd_index .. p
@@ -999,7 +1011,10 @@ function display_list(filter, sort, action)
 	
 	if not search_active then get_page_properties(filter) else update_search_results('','') end
 	draw_list()
-	utils.shared_script_property_set("simplehistory-menu-open", "yes")
+	if utils.shared_script_property_set then
+		utils.shared_script_property_set('simplehistory-menu-open', 'yes')
+	end
+	mp.set_property('user-data/simplehistory/menu-open', 'yes')
 	if o.toggle_idlescreen then mp.commandv('script-message', 'osc-idlescreen', 'no', 'no_osd') end --1.1.6# fix osc-idlescreen (value was yes for some reason)
 	list_drawn = true
 	if not search_active then get_list_keybinds() end
@@ -1662,7 +1677,10 @@ function unbind_list_keys()
 end
 
 function list_close_and_trash_collection()
-	utils.shared_script_property_set("simplehistory-menu-open", "no")
+	if utils.shared_script_property_set then
+		utils.shared_script_property_set('simplehistory-menu-open', 'no')
+	end
+	mp.set_property('user-data/simplehistory/menu-open', 'no')
 	if o.toggle_idlescreen then mp.commandv('script-message', 'osc-idlescreen', 'yes', 'no_osd') end
 	unbind_list_keys()
 	unbind_search_keys()
@@ -2128,7 +2146,7 @@ function history_resume_option()
 		if video_time > 0 then return end
 		local logged_time = 0
 		local percentage = 0
-		local video_duration = mp.get_property_number('duration')
+		local video_duration = (mp.get_property_number('duration') or 0)
 		list_contents = read_log_table()
 		if not list_contents or not list_contents[1] then return end
 		for i = #list_contents, 1, -1 do
@@ -2231,7 +2249,7 @@ mp.register_event('file-loaded', function()
 	list_close_and_trash_collection()
 	filePath, fileTitle, fileLength = get_file()
 	loadTriggered = true --1.1.5# for resume and resume-notime startup behavior (so that it only triggers if started as idle and only once)
-	if (resume_selected == true and seekTime > 0) then
+	if (o.resume_option ~= 'none' and resume_selected == true and seekTime > 0) then
 		mp.commandv('seek', seekTime, 'absolute', 'exact')
 		resume_selected = false
 	end
